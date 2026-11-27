@@ -136,7 +136,7 @@ export function renderView(items, opts = {}) {
         if (z < 0.05) { pts.push(null); continue; }
         const x = tmp.dot(right) / z;
         const y = tmp.dot(up) / z;
-        pts.push({ x: w * 0.5 + x * focal, y: h * 0.5 - y * focal, z: 1 / z });
+        pts.push({ x: w * 0.5 + x * focal, y: h * 0.5 - y * focal, z });
       }
       if (!pts[0] || !pts[1] || !pts[2]) continue;
       cv.tri(pts[0], pts[1], pts[2], col);
