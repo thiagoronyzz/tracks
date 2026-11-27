@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#0d1114" />
+    <title>Vale Aberto — 3D em terceira pessoa</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <!-- carregamento -->
+    <div id="loading" class="overlay">
+      <div class="panel loading-panel">
+        <h1 class="brand">Vale Aberto</h1>
+        <p class="tagline">campo, morros e casas — física real e personagem em terceira pessoa</p>
+        <div class="bar"><i id="loadbar"></i></div>
+        <div class="row">
+          <small id="loadtext">carregando…</small>
+          <small id="loadpercent">0%</small>
+        </div>
+        <small class="hint" id="loadhint">gerando terreno, grama e casas…</small>
+      </div>
+    </div>
+
+    <!-- início -->
+    <div id="start" class="overlay hidden">
+      <div class="panel start-panel">
+        <h1 class="brand">Vale Aberto</h1>
+        <p class="tagline">um campo aberto com relevos, casas e um personagem realista</p>
+        <div class="controls">
+          <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>andar</span></div>
+          <div><kbd>Mouse</kbd><span>olhar</span></div>
+          <div><kbd>Shift</kbd><span>correr</span></div>
+          <div><kbd>Espaço</kbd><span>pular</span></div>
+          <div><kbd>C</kbd><span>agachar</span></div>
+          <div><kbd>Esc</kbd><span>pausar</span></div>
+        </div>
+        <button id="play" class="primary">Clique para jogar</button>
+        <small class="hint">use fones para ouvir o vento e os passos · <kbd>H</kbd> mostra a ajuda</small>
+      </div>
+    </div>
+
+    <!-- pausa -->
+    <div id="pause" class="overlay hidden">
+      <div class="panel">
+        <h2>Pausado</h2>
+        <p class="tagline">Clique para voltar ao campo</p>
+        <div class="controls small">
+          <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>andar</span></div>
+          <div><kbd>Shift</kbd><span>correr</span></div>
+          <div><kbd>Espaço</kbd><span>pular</span></div>
+          <div><kbd>C</kbd><span>agachar</span></div>
+          <div><kbd>M</kbd><span>som</span></div>
+          <div><kbd>H</kbd><span>ajuda</span></div>
+        </div>
+        <button id="resume" class="primary">Continuar</button>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-tl">
+        <div class="badge">Vale Aberto</div>
+        <div class="subtle" id="hudstatus">explorando o campo</div>
+      </div>
+      <div class="hud-tr"><span id="fps">60</span> fps</div>
+      <div class="stamina-wrap" id="staminaWrap">
+        <div class="stamina"><i id="staminaBar"></i></div>
+        <small>fôlego</small>
+      </div>
+      <div class="crosshair" id="crosshair"></div>
+      <div class="toast hidden" id="toast"></div>
+      <div class="help hidden" id="help">
+        <h3>Controles</h3>
+        <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> andar · <kbd>Shift</kbd> correr · <kbd>Espaço</kbd> pular · <kbd>C</kbd> agachar</p>
+        <p><kbd>Mouse</kbd> olhar · <kbd>Roda</kbd> aproximar · <kbd>Esc</kbd> pausar · <kbd>H</kbd> fechar</p>
+      </div>
+      <div class="mobile-controls hidden" id="mobileControls">
+        <div class="pad" id="pad">
+          <div class="knob" id="knob"></div>
+        </div>
+        <div class="buttons">
+          <button id="btnJump">pular</button>
+          <button id="btnRun">correr</button>
+          <button id="btnCrouch">agachar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="overlay hidden">
+      <div class="panel">
+        <h2>Algo deu errado</h2>
+        <pre id="errorText"></pre>
+        <button class="primary" onclick="location.reload()">Recarregar</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

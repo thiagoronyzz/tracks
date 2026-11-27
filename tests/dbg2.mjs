@@ -1,0 +1,23 @@
+import * as THREE from 'three';
+import { loadGLB } from './lib/glbdom.mjs';
+import { Retargeter } from '../src/character/retarget.js';
+
+const avatar = await loadGLB('public/models/avatar.glb');
+const source = await loadGLB('public/models/motion_source.glb');
+const r = new Retargeter(source.scene, avatar.scene);
+const sb = r.sourceBones.get('Hips'), tb = r.targetBones.get('Hips');
+const src = source.scene;
+const mixer = new THREE.AnimationMixer(src);
+const clip = source.animations.find(a => a.name === 'Idle');
+const act = mixer.clipAction(clip); act.play();
+mixer.setTime(0.2); src.updateMatrixWorld(true);
+console.log('src hips local pos', sb.position.toArray().map(v=>+v.toFixed(3)));
+console.log('src hips matrixWorld', sb.matrixWorld.elements.map(v=>+v.toFixed(4)));
+console.log('rest RS', r.restSource.get('Hips').elements.map(v=>+v.toFixed(4)));
+const T = r.maps.get('Hips');
+console.log('T', T.elements.map(v=>+v.toFixed(4)));
+const AT = T.clone().multiply(sb.matrixWorld);
+console.log('AT', AT.elements.map(v=>+v.toFixed(4)));
+const pos = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+AT.decompose(pos, q, s);
+console.log('AT decomposed', pos.toArray().map(v=>+v.toFixed(3)), q.toArray().map(v=>+v.toFixed(3)), s.toArray().map(v=>+v.toFixed(3)));
