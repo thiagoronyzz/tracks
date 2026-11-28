@@ -40,6 +40,14 @@ const WALK_REF = 1.78;
 const RUN_REF = 3.9;
 const DEG = Math.PI / 180;
 
+const FOOT_TOE_OUT = 0.13; // ~7,5° de abertura natural dos pés
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
+const _qFootWorld = new THREE.Quaternion();
+const _qFootParentWorld = new THREE.Quaternion();
+const _qFootFix = new THREE.Quaternion();
+const _vFoot = new THREE.Vector3();
+const _vWant = new THREE.Vector3();
+
 export class Character {
   static async load({ avatarUrl, motionUrl, onProgress }) {
     const loader = new GLTFLoader();
@@ -132,6 +140,7 @@ export class Character {
     this.crouchDrop = 0.3;
     this.landDrop = 0.1;
     this.footMeshes = this._findFootMeshes();
+    this.footLocalFwd = this._measureFootAxes();
     this.modelOffsetY = this._calibrateFeet();
     this._calibrateOverlayDrops();
     this.holder.position.y = this.modelOffsetY;
@@ -213,6 +222,89 @@ export class Character {
     return [minPhase('l'), minPhase('r')];
   }
 
+  /**
+   * Direção "para frente" de cada sapato no espaço local do osso do pé.
+   * O retarget traz uma diferença de referencial entre os rigs que deixa as
+   * pontas dos pés viradas para trás; medimos o eixo real pela geometria.
+   */
+  _measureFootAxes() {
+    const out = {};
+    this.footAimOffset = { l: 0, r: 0 };
+    if (this.tracks.length) applyPose(this.tracks, [1, 0, 0], [0.3, 0, 0]);
+    this._resetForMeasure();
+    this.root.updateMatrixWorld(true);
+    const q = new THREE.Quaternion();
+    const p = new THREE.Vector3();
+    for (const [key, footB, toeB] of [
+      ['l', this.b.lFoot, this.b.lToe],
+      ['r', this.b.rFoot, this.b.rToe],
+    ]) {
+      if (!footB || !toeB) continue;
+      const f = footB.getWorldPosition(new THREE.Vector3());
+      const t = toeB.getWorldPosition(new THREE.Vector3());
+      const boneDir = t.sub(f);
+      boneDir.y = 0;
+      if (boneDir.lengthSq() < 1e-6) continue;
+      boneDir.normalize();
+
+      // direção real da ponta do sapato (geometria): vértice mais distante do tornozelo
+      let best = null;
+      let bestD = -1;
+      for (const m of this.footMeshes) {
+        const pos = m.geometry.attributes.position;
+        if (!pos) continue;
+        for (let i = 0; i < pos.count; i += 2) {
+          p.fromBufferAttribute(pos, i);
+          if (m.isSkinnedMesh) m.applyBoneTransform(i, p);
+          p.applyMatrix4(m.matrixWorld);
+          const dx = p.x - f.x;
+          const dz = p.z - f.z;
+          const d = Math.hypot(dx, dz);
+          if (d > 0.30) continue; // outro pé
+          if (p.y > f.y - 0.02) continue; // só a sola
+          if (d > bestD) { bestD = d; best = { dx, dz }; }
+        }
+      }
+
+      footB.getWorldQuaternion(q);
+      out[key] = boneDir.clone().applyQuaternion(q.invert()).normalize();
+      if (best && bestD > 0.05) {
+        const shoeAngle = Math.atan2(best.dx, best.dz);
+        const boneAngle = Math.atan2(boneDir.x, boneDir.z);
+        let off = shoeAngle - boneAngle;
+        while (off > Math.PI) off -= Math.PI * 2;
+        while (off < -Math.PI) off += Math.PI * 2;
+        this.footAimOffset[key] = off;
+      }
+    }
+    return out;
+  }
+
+  /** Alinha a ponta do pé com a direção em que o personagem está virado. */
+  _fixFootYaw(yaw) {
+    if (!this.footLocalFwd) return;
+    for (const [key, footB] of [['l', this.b.lFoot], ['r', this.b.rFoot]]) {
+      const local = this.footLocalFwd[key];
+      if (!footB || !local || !footB.parent) continue;
+      footB.getWorldQuaternion(_qFootWorld);
+      const fwd = _vFoot.copy(local).applyQuaternion(_qFootWorld);
+      fwd.y = 0;
+      if (fwd.lengthSq() < 1e-6) continue;
+      fwd.normalize();
+      const toeOut = (key === 'l' ? 1 : -1) * FOOT_TOE_OUT;
+      const aim = yaw + toeOut - (this.footAimOffset ? this.footAimOffset[key] : 0);
+      const want = _vWant.set(Math.sin(aim), 0, Math.cos(aim));
+      const dot = Math.max(-1, Math.min(1, fwd.dot(want)));
+      const delta = Math.atan2(fwd.z * want.x - fwd.x * want.z, dot);
+      if (Math.abs(delta) < 0.004) continue;
+      footB.parent.getWorldQuaternion(_qFootParentWorld);
+      _qFootFix.setFromAxisAngle(UP_AXIS, delta);
+      _qFootWorld.premultiply(_qFootFix);
+      footB.quaternion.copy(_qFootParentWorld.invert().multiply(_qFootWorld));
+      footB.updateMatrixWorld(true);
+    }
+  }
+
   _findFootMeshes() {
     const found = [];
     this.holder.traverse((o) => {
@@ -246,13 +338,27 @@ export class Character {
     this.holder.rotation.y = this.retargeter ? this.retargeter.forwardYaw : 0;
     this.root.updateMatrixWorld(true);
     this.root.getWorldQuaternion(this._qRootWorld);
+    if (this.footLocalFwd) this._fixFootYaw(0);
   }
 
   _calibrateFeet() {
-    // idle (pose neutra)
-    if (this.tracks.length) applyPose(this.tracks, [1, 0, 0], [0.35, 0, 0]);
-    this._resetForMeasure();
-    const idleMin = this._lowestFootY();
+    // menor altura da sola ao longo de todo o ciclo de idle (nenhum quadro afunda)
+    let idleMin = Infinity;
+    const idle = this.clips.idle;
+    if (idle && this.tracks.length) {
+      for (let i = 0; i < 16; i++) {
+        const t = (i / 16) * idle.duration;
+        applyPose(this.tracks, [1, 0, 0], [t, 0, 0]);
+        this._resetForMeasure();
+        const y = this._lowestFootY();
+        if (isFinite(y) && y < idleMin) idleMin = y;
+      }
+    }
+    if (!isFinite(idleMin)) {
+      if (this.tracks.length) applyPose(this.tracks, [1, 0, 0], [0, 0, 0]);
+      this._resetForMeasure();
+      idleMin = this._lowestFootY();
+    }
     this.idleFootY = isFinite(idleMin) ? idleMin : 0;
 
     // passada: procura o ponto mais baixo do contato (o pé afunda mais andando)
@@ -268,10 +374,10 @@ export class Character {
       }
     }
     if (!isFinite(walkMin)) walkMin = idleMin;
-    // média ponderada: nem flutua parado, nem afunda correndo
-    const ref = idleMin * 0.6 + walkMin * 0.4;
+    // parado é o estado mais visível: a sola do idle fica exatamente no chão,
+    // compensando os 2 cm de folga do controlador cinemático.
     this.walkFootY = walkMin;
-    return isFinite(ref) ? -ref + 0.006 - 0.02 : 0; // 2 cm = offset do controlador cinemático
+    return isFinite(idleMin) ? -idleMin - 0.02 : 0;
   }
 
   /** Mede de quanto o quadril precisa descer para os pés ficarem no chão. */
@@ -490,6 +596,10 @@ export class Character {
       this.pitch(this.b.neck, this.lookPitchSmoothed * 0.45);
       this.pitch(this.b.head, this.lookPitchSmoothed * 0.4);
     }
+
+    // pontas dos pés alinhadas com a direção do personagem
+    this.root.updateMatrixWorld(true);
+    this._fixFootYaw(ctx.yaw ?? 0);
 
     // passos
     if (this.footstepCallback && this.smoothedSpeed > 0.3 && ctx.grounded) {

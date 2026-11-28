@@ -85,6 +85,33 @@ export class HUD {
     }, ms);
   }
 
+
+  setCarPrompt(text) {
+    if (!this.carPrompt) this.carPrompt = document.getElementById('carprompt');
+    const el = this.carPrompt;
+    if (!el) return;
+    if (!text) { el.classList.add('hidden'); return; }
+    const label = document.getElementById('carprompttext');
+    if (label) label.textContent = text;
+    el.classList.remove('hidden');
+  }
+
+  setDriving(on) {
+    if (!this.speedo) this.speedo = document.getElementById('carspeed');
+    if (!this.speedo) return;
+    this.speedo.classList.toggle('hidden', !on);
+  }
+
+  setSpeed(kmh, health, dead) {
+    const v = document.getElementById('speedval');
+    if (v) v.textContent = Math.round(kmh);
+    const bar = document.getElementById('dmgbar');
+    if (bar) {
+      bar.style.width = `${Math.max(0, Math.min(1, health)) * 100}%`;
+      bar.style.background = dead ? '#6b1d16' : health > 0.55 ? '#8bbf4a' : health > 0.25 ? '#d8a13a' : '#cf4a33';
+    }
+  }
+
   toggleHelp(force) {
     this.helpVisible = force === undefined ? !this.helpVisible : force;
     this.helpEl?.classList.toggle('hidden', !this.helpVisible);

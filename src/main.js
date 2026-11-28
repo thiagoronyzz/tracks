@@ -23,6 +23,7 @@ import { GrassField } from './world/grass.js';
 import { Character } from './character/character.js';
 import { PlayerController, PHYS_DT, TUNING } from './character/controller.js';
 import { ThirdPersonCamera } from './camera/thirdPerson.js';
+import { Car, CAR_TUNING } from './vehicle/car.js';
 
 const hud = new HUD();
 const audio = new AudioEngine();
@@ -41,6 +42,9 @@ const state = {
   averageFps: 60,
   everStarted: false,
 };
+
+// foot | entering | driving | exiting
+const vehicle = { mode: 'foot', active: null, timer: 0, near: null };
 
 function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -134,7 +138,33 @@ async function boot() {
     anisotropy,
   });
 
-  hud.setProgress(0.76, 'carregando o personagem…');
+  hud.setProgress(0.74, 'estacionando os carros…');
+  await nextFrame();
+  const eventQueue = new RAPIER.EventQueue(true);
+  const carSpots = [
+    { x: 7.5, z: 4.5, yaw: -1.15, color: '#b6412f' },
+    { x: -10.5, z: 8.0, yaw: 2.1, color: '#2f5d8c' },
+    { x: 13.0, z: -8.5, yaw: 0.55, color: '#c9b13f' },
+  ];
+  const cars = carSpots.map((spot, i) => new Car({
+    scene, world, RAPIER, terrain, eventQueue,
+    position: { x: spot.x, y: terrain.heightAt(spot.x, spot.z), z: spot.z },
+    yaw: spot.yaw,
+    color: spot.color,
+    name: 'carro ' + (i + 1),
+  }));
+  for (const c of cars) {
+    c.onImpact = ({ force }) => {
+      audio.crash(force / 9000);
+      cam.addShake(Math.min(0.55, force / 260000));
+    };
+    c.onDeath = () => {
+      audio.explosion();
+      hud.toast('o motor fundiu — o carro pegou fogo', 3200);
+    };
+  }
+
+  hud.setProgress(0.78, 'carregando o personagem…');
   const { avatar, motion } = await Character.load({
     avatarUrl: MODELS.avatar,
     motionUrl: MODELS.motion,
@@ -175,9 +205,18 @@ async function boot() {
         audio.setEnabled(!audio.enabled);
         hud.toast(audio.enabled ? 'som ligado' : 'som desligado', 1400);
       }
+      if (code === 'KeyE') {
+        if (vehicle.mode === 'foot' && vehicle.near) enterVehicle(vehicle.near);
+        else if (vehicle.mode === 'driving') exitVehicle();
+      }
       if (code === 'KeyR') {
-        controller.respawn(0, -2);
-        hud.toast('voltando ao centro do vale', 1600);
+        if (vehicle.mode === 'driving' && vehicle.active) {
+          vehicle.active.respawn();
+          hud.toast('carro de volta ao lugar', 1600);
+        } else {
+          controller.respawn(0, -2);
+          hud.toast('voltando ao centro do vale', 1600);
+        }
       }
       if (code === 'Escape' && state.everStarted && !state.paused) {
         pauseGame();
@@ -189,6 +228,88 @@ async function boot() {
     input.touch.active = true;
     hud.setTouchMode(true);
     bindTouchControls(input);
+  }
+
+  const carGround = new THREE.Vector3();
+  const carQuat = new THREE.Quaternion();
+  const carEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+  function carYawOf(c) {
+    const r = c.body.rotation();
+    carQuat.set(r.x, r.y, r.z, r.w);
+    return carEuler.setFromQuaternion(carQuat, 'YXZ').y;
+  }
+
+  function enterVehicle(c) {
+    if (!c || vehicle.mode !== 'foot') return;
+    const t = c.body.translation();
+    if (Math.hypot(t.x - controller.position.x, t.z - controller.position.z) > 4.2) return;
+    vehicle.mode = 'entering';
+    vehicle.active = c;
+    vehicle.timer = 0.58;
+    vehicle.near = null;
+    c.openDoor('left', true);
+    hud.setCarPrompt(null);
+  }
+
+  function finishEnter() {
+    const c = vehicle.active;
+    if (!c) { vehicle.mode = 'foot'; return; }
+    c.openDoor('left', false);
+    vehicle.mode = 'driving';
+    character.root.visible = false;
+    if (controller.collider?.setEnabled) controller.collider.setEnabled(false);
+    controller.velocity.set(0, 0, 0);
+    cam.height = 1.12;
+    cam.shoulder = 0;
+    cam.desiredDistance = 7.4;
+    cam.baseFov = 66;
+    cam.yaw = carYawOf(c);
+    audio.startEngine();
+    hud.setDriving(true);
+    hud.toast('W/S acelera e freia · A/D dirige · Espaço freio de mão', 3400);
+  }
+
+  function exitVehicle() {
+    const c = vehicle.active;
+    if (!c || vehicle.mode !== 'driving') return;
+    if (c.speedKmh > 22) {
+      hud.toast('pare o carro para descer', 1500);
+      return;
+    }
+    vehicle.mode = 'exiting';
+    vehicle.timer = 0.5;
+    c.openDoor('left', true);
+    audio.stopEngine();
+  }
+
+  function finishExit() {
+    const c = vehicle.active;
+    if (!c) { vehicle.mode = 'foot'; return; }
+    const p = c.exitPosition();
+    controller.respawn(p.x, p.z);
+    controller.yaw = carYawOf(c) + Math.PI * 0.5;
+    if (controller.collider?.setEnabled) controller.collider.setEnabled(true);
+    character.root.visible = true;
+    cam.height = 1.42;
+    cam.shoulder = 0.42;
+    cam.desiredDistance = 4.0;
+    cam.baseFov = 62;
+    vehicle.mode = 'foot';
+    vehicle.active = null;
+    c.openDoor('left', false);
+    hud.setDriving(false);
+  }
+
+  function nearestCar() {
+    let best = null;
+    let bestD = 3.4;
+    for (const c of cars) {
+      const t = c.body.translation();
+      const d = Math.hypot(t.x - controller.position.x, t.z - controller.position.z);
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return best;
   }
 
   function startGame() {
@@ -286,24 +407,52 @@ async function boot() {
     prevYaw = controller.yaw;
     const active = state.everStarted && !state.paused;
 
+    const driving = vehicle.mode === 'driving' && vehicle.active;
+    const activeCar = vehicle.mode === 'driving' || vehicle.mode === 'entering' || vehicle.mode === 'exiting'
+      ? vehicle.active : null;
+
     if (active) {
+      if (vehicle.mode === 'entering' || vehicle.mode === 'exiting') {
+        vehicle.timer -= dt;
+        if (vehicle.timer <= 0) {
+          if (vehicle.mode === 'entering') finishEnter();
+          else finishExit();
+        }
+      }
+
       accumulator += dt;
       let steps = 0;
       while (accumulator >= PHYS_DT && steps < 6) {
-        controller.step(PHYS_DT, {
-          moveX: inp.moveX,
-          moveZ: inp.moveZ,
-          run: inp.run,
-          crouch: inp.crouch,
-          jumpPressed: steps === 0 ? inp.jumpPressed : false,
-          jumpHeld: inp.jumpHeld,
-          cameraYaw: cam.yaw,
-        });
-        world.step();
+        if (vehicle.mode === 'foot') {
+          controller.step(PHYS_DT, {
+            moveX: inp.moveX,
+            moveZ: inp.moveZ,
+            run: inp.run,
+            crouch: inp.crouch,
+            jumpPressed: steps === 0 ? inp.jumpPressed : false,
+            jumpHeld: inp.jumpHeld,
+            cameraYaw: cam.yaw,
+          });
+        }
+        for (const c of cars) {
+          if (driving && c === activeCar) {
+            c.update(PHYS_DT, {
+              throttle: inp.moveZ,
+              steer: -inp.moveX,
+              brake: 0,
+              handbrake: inp.jumpHeld,
+            });
+          } else {
+            c.update(PHYS_DT, {});
+          }
+        }
+        world.step(eventQueue);
+        for (const c of cars) c.handleContactEvents(eventQueue);
         accumulator -= PHYS_DT;
         steps++;
       }
       if (steps === 6) accumulator = 0;
+      for (const c of cars) c.syncVisual();
 
       if (controller.justLanded) {
         audio.land(controller.justLanded.impact);
@@ -321,6 +470,7 @@ async function boot() {
         cam.yaw = orbit;
         cam.pitch = 0.16;
       }
+      for (const c of cars) c.syncVisual();
     }
 
     currentFeet(curFeet);
@@ -330,47 +480,88 @@ async function boot() {
     yawRender = prevYaw + yawDelta * alpha;
     turnLean = lerp(turnLean, clamp(yawDelta / Math.max(dt, 0.001) * 0.22, -1, 1), 1 - Math.exp(-6 * dt));
 
-    character.update(dt, {
-      position: feetPos,
-      yaw: yawRender,
-      speed: controller.speed,
-      grounded: controller.grounded,
-      vy: controller.velocity.y,
-      crouchAmount: controller.crouchAmount,
-      landingImpact: controller.landingImpact,
-      terrain,
-      groundNormal: controller.groundNormal,
-      cameraYaw: cam.yaw,
-      cameraPitch: cam.pitch,
-      turnLean,
-    });
+    if (!driving) {
+      character.update(dt, {
+        position: feetPos,
+        yaw: yawRender,
+        speed: vehicle.mode === 'foot' ? controller.speed : 0,
+        grounded: controller.grounded,
+        vy: controller.velocity.y,
+        crouchAmount: controller.crouchAmount,
+        landingImpact: controller.landingImpact,
+        terrain,
+        groundNormal: controller.groundNormal,
+        cameraYaw: cam.yaw,
+        cameraPitch: cam.pitch,
+        turnLean,
+      });
+    }
 
-    cam.playerCollider = controller.collider;
+    // alvo da câmera: personagem a pé ou o carro
+    let camFeet = feetPos;
+    let camYawTarget = yawRender;
+    let camSpeed = controller.speed;
+    let camPhase = character.phase ?? 0;
+    if (driving) {
+      const t = activeCar.body.translation();
+      carGround.set(t.x, t.y, t.z);
+      camFeet = carGround;
+      camYawTarget = carYawOf(activeCar);
+      camSpeed = Math.abs(activeCar.forwardSpeed);
+      camPhase = 0;
+    }
+
+    cam.playerCollider = driving ? activeCar.collider : controller.collider;
     cam.update(dt, {
-      feetPos,
-      yaw: yawRender,
-      speed: controller.speed,
-      grounded: controller.grounded,
+      feetPos: camFeet,
+      yaw: camYawTarget,
+      speed: camSpeed,
+      grounded: driving ? true : controller.grounded,
       landingImpact: 0,
-      phase: character.phase ?? 0,
+      phase: camPhase,
     });
 
-    grass.update(time, feetPos);
-    sky.update(dt, camera, feetPos, time);
-    audio.update(controller.speed);
+    grass.update(time, camFeet);
+    sky.update(dt, camera, camFeet, time);
+    if (driving) {
+      const rpm = Math.min(1, 0.14 + (camSpeed / CAR_TUNING.maxSpeed) * 0.86);
+      if (activeCar.dead) {
+        if (!activeCar.engineSilenced) {
+          activeCar.engineSilenced = true;
+          audio.stopEngine();
+        }
+      } else {
+        audio.setEngine(rpm, Math.abs(inp.moveZ));
+      }
+      audio.update(0);
+    } else {
+      audio.update(camSpeed);
+    }
 
     // ---- HUD --------------------------------------------------------------
     statusTimer += dt;
     if (statusTimer > 0.25) {
       statusTimer = 0;
-      const showStamina = controller.stamina < 0.995 || (inp.run && controller.speed > TUNING.walkSpeed * 1.1);
-      hud.setStamina(controller.stamina, showStamina);
-      let status = 'parado';
-      if (!controller.grounded) status = 'no ar';
-      else if (controller.crouching) status = controller.speed > 0.3 ? 'andando agachado' : 'agachado';
-      else if (controller.speed > TUNING.walkSpeed * 1.15) status = 'correndo';
-      else if (controller.speed > 0.4) status = 'andando';
-      hud.setStatus(status);
+      if (driving) {
+        hud.setStamina(controller.stamina, false);
+        hud.setCarPrompt(null);
+        hud.setSpeed(activeCar.speedKmh, activeCar.health, activeCar.dead);
+        hud.setStatus(activeCar.dead ? 'motor fundido' : activeCar.health < 0.5 ? 'carro avariado' : 'dirigindo');
+      } else {
+        hud.setDriving(false);
+        const showStamina = controller.stamina < 0.995 || (inp.run && controller.speed > TUNING.walkSpeed * 1.1);
+        hud.setStamina(controller.stamina, showStamina);
+        let status = 'parado';
+        if (!controller.grounded) status = 'no ar';
+        else if (controller.crouching) status = controller.speed > 0.3 ? 'andando agachado' : 'agachado';
+        else if (controller.speed > TUNING.walkSpeed * 1.15) status = 'correndo';
+        else if (controller.speed > 0.4) status = 'andando';
+        hud.setStatus(status);
+        if (vehicle.mode === 'foot' && state.everStarted) {
+          vehicle.near = nearestCar();
+          hud.setCarPrompt(vehicle.near ? 'entrar no carro' : null);
+        }
+      }
       if (input.touch.active) updateKnob(input);
     }
 
@@ -427,7 +618,7 @@ async function boot() {
   requestAnimationFrame(frame);
 
   // expõe para depuração no console
-  window.__game = { scene, camera, renderer, terrain, controller, character, grass, sky, world, state };
+  window.__game = { scene, camera, renderer, terrain, controller, character, grass, sky, world, state, cars, vehicle };
 }
 
 function bindTouchControls(input) {

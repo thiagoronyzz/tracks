@@ -131,6 +131,85 @@ export class AudioEngine {
     this._burst({ duration: 0.16, gain: 0.1 * i + 0.04, type: 'lowpass', freq: 520 });
   }
 
+
+  // ---- carro -------------------------------------------------------------
+  startEngine() {
+    if (!this.ready || this.engineGain) return;
+    const ctx = this.ctx;
+    this.engineGain = ctx.createGain();
+    this.engineGain.gain.value = 0.0001;
+    this.engineFilter = ctx.createBiquadFilter();
+    this.engineFilter.type = 'lowpass';
+    this.engineFilter.frequency.value = 600;
+    this.engineFilter.Q.value = 3.5;
+    this.engineOsc1 = ctx.createOscillator();
+    this.engineOsc1.type = 'sawtooth';
+    this.engineOsc1.frequency.value = 55;
+    this.engineOsc2 = ctx.createOscillator();
+    this.engineOsc2.type = 'square';
+    this.engineOsc2.frequency.value = 110;
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.28;
+    const rasp = ctx.createBufferSource();
+    rasp.buffer = this.noiseBuffer;
+    rasp.loop = true;
+    const raspFilter = ctx.createBiquadFilter();
+    raspFilter.type = 'bandpass';
+    raspFilter.frequency.value = 220;
+    raspFilter.Q.value = 1.4;
+    const raspGain = ctx.createGain();
+    raspGain.gain.value = 0.05;
+    this.engineOsc1.connect(this.engineFilter);
+    this.engineOsc2.connect(g2).connect(this.engineFilter);
+    rasp.connect(raspFilter).connect(raspGain).connect(this.engineFilter);
+    this.engineFilter.connect(this.engineGain).connect(this.master);
+    this.engineOsc1.start();
+    this.engineOsc2.start();
+    rasp.start();
+    this.engineRasp = rasp;
+    this.engineGain.gain.setTargetAtTime(0.09, ctx.currentTime, 0.25);
+  }
+
+  /** rpm01: 0..1 (marcha lenta → corte), load: 0..1 (acelerador). */
+  setEngine(rpm01, load = 0) {
+    if (!this.engineGain || !this.ctx || !this.enabled) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const rpm = Math.max(0, Math.min(1, rpm01));
+    const base = 42 + rpm * 128;
+    this.engineOsc1.frequency.setTargetAtTime(base, now, 0.06);
+    this.engineOsc2.frequency.setTargetAtTime(base * 2.02, now, 0.06);
+    this.engineFilter.frequency.setTargetAtTime(420 + rpm * 2200 + load * 900, now, 0.08);
+    this.engineGain.gain.setTargetAtTime(0.07 + load * 0.06 + rpm * 0.03, now, 0.1);
+  }
+
+  stopEngine() {
+    if (!this.engineGain || !this.ctx) return;
+    const ctx = this.ctx;
+    this.engineGain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.12);
+    const g = this.engineGain;
+    const o1 = this.engineOsc1, o2 = this.engineOsc2, rasp = this.engineRasp;
+    setTimeout(() => {
+      try { o1.stop(); o2.stop(); rasp.stop(); g.disconnect(); } catch (e) { /* já parado */ }
+    }, 500);
+    this.engineGain = null;
+    this.engineOsc1 = null;
+    this.engineOsc2 = null;
+    this.engineRasp = null;
+  }
+
+  crash(force = 1) {
+    const k = Math.min(1, force / 60);
+    this._burst({ duration: 0.32, gain: 0.22 + k * 0.3, type: 'lowpass', freq: 1400 + k * 2200, decay: 1.4 });
+    this._thump({ freq: 70, gain: 0.2 + k * 0.35, duration: 0.4 });
+  }
+
+  explosion() {
+    this._burst({ duration: 1.1, gain: 0.5, type: 'lowpass', freq: 900, decay: 1.1 });
+    this._thump({ freq: 55, gain: 0.55, duration: 0.9 });
+    this._burst({ duration: 0.5, gain: 0.25, type: 'bandpass', freq: 2600, q: 0.7, decay: 1 });
+  }
+
   rustle() {
     this._burst({ duration: 0.2, gain: 0.06, type: 'highpass', freq: 2400 });
   }

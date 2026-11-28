@@ -308,3 +308,64 @@ button.primary:active { transform: translateY(1px); }
   .controls { grid-template-columns: 1fr; }
   .brand { font-size: 26px; }
 }
+
+/* ---- carro ---------------------------------------------------------------- */
+.carprompt {
+  position: fixed;
+  left: 50%;
+  bottom: 16%;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(10, 14, 16, 0.72);
+  border: 1px solid rgba(200, 224, 138, 0.35);
+  color: #e8eef0;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  transition: opacity 0.18s ease;
+}
+
+.speedo {
+  position: fixed;
+  right: 22px;
+  bottom: 26px;
+  width: 132px;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  background: rgba(10, 14, 16, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(8px);
+  text-align: center;
+}
+
+.speedo .dial b {
+  display: block;
+  font-size: 34px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #eaf0e2;
+}
+
+.speedo .dial small {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(226, 236, 228, 0.55);
+}
+
+.speedo .dmg {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.speedo .dmg i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: #8bbf4a;
+  transition: width 0.25s ease, background 0.3s ease;
+}

@@ -24,7 +24,11 @@ npm run build
 | Pausar | `Esc` |
 | Som | `M` |
 | Ajuda | `H` |
-| Voltar ao centro | `R` |
+| Entrar / sair do carro | `E` |
+| Voltar ao centro | `R` (com o carro: volta o carro ao lugar) |
+
+Dirigindo: `W`/`S` aceleram e freiam/ré, `A`/`D` dirigem, `Espaço` é o freio de
+mão (derrapa), `E` desce do carro (abaixo de ~20 km/h).
 
 No celular: metade esquerda da tela = analógico, metade direita = olhar,
 botões de pular / correr / agachar.
@@ -40,6 +44,9 @@ src/world/houses.js         vila: 13 casas com fundação, paredes, telhado e co
 src/world/props.js          árvores, pedras, cercas, fardos (com colisores)
 src/world/sky.js            céu em gradiente, sol, nuvens, montanhas distantes, luz e sombra
 src/world/grass.js          grama instanciada por célula (sem "teleporte" ao andar)
+src/vehicle/carModel.js     sedã procedural: perfil extrudado, portas com pivô, interior
+src/vehicle/car.js          física do carro (Rapier), dano, amassados, fogo, portas
+src/vehicle/particles.js    fumaça e fogo em partículas
 src/character/retarget.js   retarget do rig Mixamo para o avatar, com alinhamento de eixos
 src/character/clip.js       reamostragem e mistura de poses por osso
 src/character/character.js  personagem: locomoção, agachar, pulo, pouso, olhar, passos
@@ -48,6 +55,17 @@ src/camera/thirdPerson.js   câmera em terceira pessoa com colisão, bob e shake
 src/ui/hud.js, src/style.css  HUD, telas e estilos
 src/audio/audio.js          vento, passos, pulo e impacto (WebAudio procedural)
 ```
+
+## Carros
+
+- Chassi dinâmico de ~1.400 kg com centro de massa baixo e controlador de
+  veículo por raios do Rapier: suspensão independente nas 4 rodas, motor nas
+  traseiras, freio por roda e freio de mão que solta a traseira.
+- Portas com dobradiça animada (abrem ao entrar e ao sair).
+- Batidas: o dano vem da velocidade de aproximação. O painel amassa de verdade
+  (os vértices da carroceria são empurrados para dentro perto do ponto do
+  impacto), o motor perde potência, começam a sair fumaça e, quando funde, fogo
+  com luz pulsante e o carro para.
 
 ## Notas técnicas
 
@@ -66,4 +84,8 @@ node tests/character-poses.mjs   # grade de poses + medidas de calibração
 node tests/boot-sim.mjs          # simula o jogo (mundo + física + câmera) por ~20 s
 node tests/world-view.mjs        # render de software do terreno e das casas
 node tests/frame-view.mjs        # enquadramento da câmera com o personagem
+node tests/car-sim.mjs           # carro: assentar, acelerar, curvar, frear, bater
+node tests/car-crash.mjs         # curva de dano por velocidade de impacto
+node tests/car-game-sim.mjs      # entrar no carro, dirigir, bater, sair e andar
+node tests/car-view.mjs          # render de software do carro
 ```

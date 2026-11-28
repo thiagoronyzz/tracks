@@ -35,6 +35,7 @@
           <div><kbd>Shift</kbd><span>correr</span></div>
           <div><kbd>Espaço</kbd><span>pular</span></div>
           <div><kbd>C</kbd><span>agachar</span></div>
+          <div><kbd>E</kbd><span>entrar no carro</span></div>
           <div><kbd>Esc</kbd><span>pausar</span></div>
         </div>
         <button id="play" class="primary">Clique para jogar</button>
@@ -71,11 +72,17 @@
         <small>fôlego</small>
       </div>
       <div class="crosshair" id="crosshair"></div>
+      <div class="carprompt hidden" id="carprompt"><kbd>E</kbd> <span id="carprompttext">entrar no carro</span></div>
+      <div class="speedo hidden" id="carspeed">
+        <div class="dial"><b id="speedval">0</b><small>km/h</small></div>
+        <div class="dmg"><i id="dmgbar"></i></div>
+      </div>
       <div class="toast hidden" id="toast"></div>
       <div class="help hidden" id="help">
         <h3>Controles</h3>
         <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> andar · <kbd>Shift</kbd> correr · <kbd>Espaço</kbd> pular · <kbd>C</kbd> agachar</p>
-        <p><kbd>Mouse</kbd> olhar · <kbd>Roda</kbd> aproximar · <kbd>Esc</kbd> pausar · <kbd>H</kbd> fechar</p>
+        <p><kbd>Mouse</kbd> olhar · <kbd>Roda</kbd> aproximar · <kbd>E</kbd> entrar/sair do carro · <kbd>Esc</kbd> pausar · <kbd>H</kbd> fechar</p>
+        <p>No carro: <kbd>W</kbd>/<kbd>S</kbd> acelerar e frear · <kbd>A</kbd>/<kbd>D</kbd> dirigir · <kbd>Espaço</kbd> freio de mão</p>
       </div>
       <div class="mobile-controls hidden" id="mobileControls">
         <div class="pad" id="pad">
