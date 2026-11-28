@@ -1,0 +1,19 @@
+{
+  "name": "vale-realista-3d",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Jogo 3D em terceira pessoa com personagem realista, física real e mundo aberto de campo e morros",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.14.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
